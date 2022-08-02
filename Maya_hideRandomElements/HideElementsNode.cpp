@@ -57,12 +57,17 @@ HideElementsNode::~HideElementsNode()
 
 MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 {
+	TimeProfiler main_profiler = TimeProfiler();
+	main_profiler.print_info = MString("compute(): ");
+	main_profiler.addTimer();
 	MStatus status;
 	if (plug == geometryOut)
 	{
 		int grow_iterations = data.inputValue(growIters).asInt();
 		double hide_percentage = data.inputValue(hidePercent).asDouble() * .01;
 		MObject geo = data.inputValue(geometryIn).asMesh();
+		MDataHandle geometryOutputDataHandle = data.outputValue(geometryOut);
+
 		MItMeshPolygon polygon_itr(geo, &status);
 		if (!status)
 		{
@@ -78,13 +83,11 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 
 			meshFn.setInvisibleFaces(faceIDs);
 		}
-
-		MDataHandle geometryOutputDataHandle = data.outputValue(geometryOut);
 		geometryOutputDataHandle.setMObject(geo);
 
 		data.setClean(plug);
 	}
-	
+	main_profiler.stopTimer();
 	return (status);
 }
 
@@ -94,55 +97,47 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 
 MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
 {
-#ifdef _DEBUG
+	TimeProfiler storeFaceIds_profiler = TimeProfiler();
+	storeFaceIds_profiler.print_info = MString("storeFaceIds: ");
 	TimeProfiler extendToShell_profiler = TimeProfiler();
-	extendToShell_profiler.print_info = MString("extendtoShell: ");
+	extendToShell_profiler.print_info = MString("extendtoShell(): ");
 	TimeProfiler removingShells_profiler = TimeProfiler();
 	removingShells_profiler.print_info = MString("removeShells: ");
-#endif
 	MString out_str;
 
 	// Store all the element IDs in a MIntArray
+	storeFaceIds_profiler.addTimer();
 	std::vector<int> faceIDs;
 	for (polygon_itr.reset(); !polygon_itr.isDone(); polygon_itr.next())
 	{
 		faceIDs.push_back(polygon_itr.index());
 	}
+	storeFaceIds_profiler.stopTimer();
+
 	// pass MItMeshPolygon into the extendToShell() function and get the shell IDs
 	MUintArray selected_shells;
-
-	int loop_count = 0;
 	MUintArray shell_ids;
 
+	int count = 0;
 	while (faceIDs.size() > 0)
 	{
-		loop_count++;
-		// Safeguard against infinite loops
-		if (loop_count > 1000)
-		{
-			break;
-		}
-		double rand_num = MRandom::Rand_d(loop_count, time(NULL) + loop_count);
-#ifdef _DEBUG
+		count++;
+		double rand_num = MRandom::Rand_d(count, time(NULL) + count);
+
 		extendToShell_profiler.addTimer();
-#endif 
 		shell_ids = extendToShell(polygon_itr, grow_iterations, faceIDs[0]);
-#ifdef _DEBUG
 		extendToShell_profiler.stopTimer();
-#endif 
-		// take the returned indices and store them with a random value assigned to that set
-#ifdef _DEBUG
+
+		// Remove shell_ids from faceIDs
 		removingShells_profiler.addTimer();
-#endif 
-		for (unsigned int j = 0; j < shell_ids.length(); j++)
+		for (const auto& shell_id : shell_ids)
 		{
 			if (faceIDs.size() > 0)
 			{
-				faceIDs.erase(std::remove(faceIDs.begin(), faceIDs.end(), shell_ids[j]), faceIDs.end());
-
-				if (rand_num >= hide_percentage)
+				faceIDs.erase(std::remove(faceIDs.begin(), faceIDs.end(), shell_id), faceIDs.end());
+				if (rand_num > hide_percentage)
 				{
-					selected_shells.append(shell_ids[j]);
+					selected_shells.append(shell_id);
 				}
 			}
 			else
@@ -150,12 +145,10 @@ MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int
 				break;
 			}
 		}
-#ifdef _DEBUG
 		removingShells_profiler.stopTimer();
-#endif
 	}
 	out_str = "Final shell amount: ";
-	out_str += loop_count;
+	out_str += count;
 	MGlobal::displayInfo(out_str);
 	return selected_shells;
 }
@@ -165,7 +158,6 @@ MUintArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const in
 {
 	MUintArray face_ids;
 	MStatus status;
-	MString out_str;
 
 	// Full Element ID tree, initialize with start index
 	std::vector<std::vector<int>> element_ids;

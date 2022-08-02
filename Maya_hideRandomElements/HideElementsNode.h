@@ -31,7 +31,6 @@ private:
 	// Output attributes
 	static MObject geometryOut;
 
-
 	static bool elementExists(const std::vector<std::vector<int>>& array, int item);
 
 	MUintArray gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage);

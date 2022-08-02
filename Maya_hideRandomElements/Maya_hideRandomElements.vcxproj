@@ -167,13 +167,13 @@ python $(ProjectDir)py_scripts\load_plugin.py</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="HideElementsCommand.cpp" />
+    <ClCompile Include="HideElementsNode.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Timer.h" />
-    <ClInclude Include="HideElementsCommand.h" />
+    <ClInclude Include="HideElementsNode.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

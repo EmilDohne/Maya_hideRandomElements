@@ -1,13 +1,15 @@
-#include "HideElementsCommand.h"
+#include "HideElementsNode.h"
 #include "Timer.h"
 
+#include <maya/MPxLocatorNode.h>
+#include <maya/MFnTypedAttribute.h>
+#include <maya/MFnMeshData.h>
 #include <maya/MGlobal.h>
 #include <maya/MItMeshPolygon.h>
 #include <maya/MSelectionList.h>
 #include <maya/MDagPath.h>
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
-#include <maya/MObject.h>
 #include <maya/MIntArray.h>
 #include <maya/MSyntax.h>
 #include <maya/MArgDatabase.h>
@@ -22,71 +24,71 @@
 #include <unordered_map>
 
 //----------------------------------------------------------------------------
-// STATIC CONSTANTS
+//  CONSTANTS
 //----------------------------------------------------------------------------
-static const MString MEL_COMMAND = "HideRandomElements";
+static const MTypeId TYPE_ID = MTypeId(0x0013b6c0);
+static const MString TYPE_NAME = "HideRandomElementsNode";
 
-static const char* ITERATIONS_FLAG[2] = { "-i", "-iterations" };
+//----------------------------------------------------------------------------
+//  STATIC VARIABLES
+//----------------------------------------------------------------------------
+MObject HideElementsNode::geometryIn;
+MObject HideElementsNode::geometryOut;
 
 //----------------------------------------------------------------------------
 // PUBLIC METHODS
 //----------------------------------------------------------------------------
-HideElementsCommand::HideElementsCommand() :
-	MPxCommand(),
-	mUndoable(false),
-	mEdit(false),
-	mQuery(false),
-	mIterations(false)
+HideElementsNode::HideElementsNode() :
+	MPxNode()
 {
 }
 
-HideElementsCommand::~HideElementsCommand()
+
+HideElementsNode::~HideElementsNode()
 {
 
 }
 
-MStatus HideElementsCommand::doIt(const MArgList& args)
+
+//MStatus HideElementsNode::doIt(const MArgList& args)
+//{
+//	int iterations = 100;
+//	// Gather the shells to be hidden
+//	MIntArray element_ids = gatherShells(iterations, .5);
+//
+//	// Polygon selection
+//	MFnSingleIndexedComponent mfn_component;
+//	MObject component = mfn_component.create(MFn::kMeshPolygonComponent);
+//	mfn_component.addElements(element_ids);
+//
+//	MSelectionList curr_sel;
+//	MSelectionList to_sel;
+//	MDagPath curr_sel_dag;
+//	MGlobal::getActiveSelectionList(curr_sel);
+//	curr_sel.getDagPath(0, curr_sel_dag);
+//	to_sel.add(curr_sel_dag, component);
+//
+//	MGlobal::setActiveSelectionList(to_sel);
+//
+//	return(status);
+//}
+
+MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 {
-	// Default value for iterations
-	int iterations = 100;
-
-	MStatus status;
-
-	// Extra command arguments
-	MArgDatabase argData(syntax(), args, &status);
-	mEdit = argData.isEdit();
-	mQuery = argData.isQuery();
-	mIterations = argData.isFlagSet(ITERATIONS_FLAG[0]);
-	if (mIterations)
+	if (plug == geometryIn)
 	{
-		iterations = argData.flagArgumentInt(ITERATIONS_FLAG[0], 0);
+		MObject geo = data.inputValue(geometryIn).asMesh();
+
 	}
 
-	// Gather the shells to be hidden
-	MIntArray element_ids = gatherShells(iterations, .5);
-
-	// Polygon selection
-	MFnSingleIndexedComponent mfn_component;
-	MObject component = mfn_component.create(MFn::kMeshPolygonComponent);
-	mfn_component.addElements(element_ids);
-
-	MSelectionList curr_sel;
-	MSelectionList to_sel;
-	MDagPath curr_sel_dag;
-	MGlobal::getActiveSelectionList(curr_sel);
-	curr_sel.getDagPath(0, curr_sel_dag);
-	to_sel.add(curr_sel_dag, component);
-
-	MGlobal::setActiveSelectionList(to_sel);
-
-	return(status);
+	return (MStatus::kSuccess);
 }
 
 //----------------------------------------------------------------------------
 // PRIVATE METHODS
 //----------------------------------------------------------------------------
 
-MIntArray HideElementsCommand::gatherShells(const int& grow_iterations, const double& hide_percentage)
+MIntArray HideElementsNode::gatherShells(const int& grow_iterations, const double& hide_percentage)
 {
 #ifdef _DEBUG
 	TimeProfiler extendToShell_profiler = TimeProfiler();
@@ -163,7 +165,7 @@ MIntArray HideElementsCommand::gatherShells(const int& grow_iterations, const do
 }
 
 
-MIntArray HideElementsCommand::extendToShell(MItMeshPolygon& polygon_itr, const int& grow_iterations, const int& start_index)
+MIntArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int& grow_iterations, const int& start_index)
 {
 	MIntArray face_ids;
 	MStatus status;
@@ -197,7 +199,7 @@ MIntArray HideElementsCommand::extendToShell(MItMeshPolygon& polygon_itr, const 
 			for (int k = 0; k < connected_faces.size(); k++)
 			{
 				// Check if ID is unique before pushing into array
-				if (!HideElementsCommand::elementExists(element_ids, connected_faces[k]))
+				if (!HideElementsNode::elementExists(element_ids, connected_faces[k]))
 				{
 					element_ids[tree_level].push_back(connected_faces[k]);
 				}
@@ -218,7 +220,8 @@ MIntArray HideElementsCommand::extendToShell(MItMeshPolygon& polygon_itr, const 
 	return (face_ids);
 }
 
-std::vector<int> HideElementsCommand::growSelection(MItMeshPolygon& polygon_itr, std::vector<std::vector<int>>& element_ids, const int& index, const int& depth)
+
+std::vector<int> HideElementsNode::growSelection(MItMeshPolygon& polygon_itr, std::vector<std::vector<int>>& element_ids, const int& index, const int& depth)
 {
 	MIntArray ids;
 	int dummy_index;
@@ -243,7 +246,7 @@ std::vector<int> HideElementsCommand::growSelection(MItMeshPolygon& polygon_itr,
 //----------------------------------------------------------------------------
 
 
-bool HideElementsCommand::elementExists(const std::vector<std::vector<int>>& array, int item)
+bool HideElementsNode::elementExists(const std::vector<std::vector<int>>& array, int item)
 {
 	std::vector<std::vector<int>>::const_iterator row;
 
@@ -258,24 +261,45 @@ bool HideElementsCommand::elementExists(const std::vector<std::vector<int>>& arr
 }
 
 
-
-void* HideElementsCommand::Creator()
+void* HideElementsNode::Creator()
 {
-	return(new HideElementsCommand());
+	return(new HideElementsNode());
 }
 
-MString HideElementsCommand::CommandName() {
-	return MEL_COMMAND;
+
+MStatus HideElementsNode::Initialize()
+{
+	MStatus status;
+	MFnTypedAttribute typedAttr;
+
+	MFnMeshData fnMeshData;
+	MObject meshDefaultObject = fnMeshData.create(&status);
+	geometryIn = typedAttr.create("geometryIn", "in", MFnData::kMesh, meshDefaultObject);
+	status = typedAttr.setKeyable(true);
+	status = typedAttr.setWritable(true);
+	status = typedAttr.setReadable(false);
+
+	geometryOut = typedAttr.create("geometryOut", "out", MFnData::kMesh, meshDefaultObject);
+	status = typedAttr.setKeyable(true);
+	status = typedAttr.setReadable(true);
+	status = typedAttr.setWritable(false);
+
+	addAttribute(geometryIn);
+	addAttribute(geometryOut);
+
+	attributeAffects(geometryIn, geometryOut);
+
+	return (status);
 }
 
-MSyntax HideElementsCommand::CreateSyntax() {
 
-	MSyntax syntax;
+MTypeId HideElementsNode::GetTypeId()
+{
+	return(TYPE_ID);
+}
 
-	syntax.enableEdit(true);
-	syntax.enableQuery(true);
 
-	syntax.addFlag(ITERATIONS_FLAG[0], ITERATIONS_FLAG[1], MSyntax::kUnsigned);
-
-	return(syntax);
+MString HideElementsNode::GetTypeName()
+{
+	return(TYPE_NAME);
 }

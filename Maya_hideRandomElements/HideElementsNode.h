@@ -1,32 +1,33 @@
 #pragma once
 
-#include <maya/MPxCommand.h>
+#include <maya/MPxLocatorNode.h>
 #include <maya/MIntArray.h>
-#include <maya/MSyntax.h>
 
-#include <unordered_map>
 #include <vector>
 
-class HideElementsCommand : public MPxCommand
+class HideElementsNode : public MPxNode
 {
 public:
-	HideElementsCommand();
-	virtual ~HideElementsCommand() override;
+	HideElementsNode();
+	virtual ~HideElementsNode() override;
 
-	virtual MStatus doIt(const MArgList& args) override;
+	//virtual MStatus doIt(const MArgList& args) override;
+	virtual MStatus compute(const MPlug& plug, MDataBlock& data) override;
 
 	//Static methods
 	static void* Creator();
+	static MStatus Initialize();
 
-	static MString CommandName();
-	static MSyntax CreateSyntax();
+	static MTypeId GetTypeId();
+	static MString GetTypeName();
 
 private:
+	// Input attributes
+	static MObject geometryIn;
 
-	bool mUndoable;
-	bool mEdit;
-	bool mQuery;
-	bool mIterations;
+	// Output attributes
+	static MObject geometryOut;
+
 
 	static bool elementExists(const std::vector<std::vector<int>>& array, int item);
 

@@ -3,7 +3,9 @@
 
 #include <maya/MPxLocatorNode.h>
 #include <maya/MFnTypedAttribute.h>
+#include <maya/MFnNumericAttribute.h>
 #include <maya/MFnMeshData.h>
+#include <maya/MFnNumericData.h>
 #include <maya/MGlobal.h>
 #include <maya/MItMeshPolygon.h>
 #include <maya/MSelectionList.h>
@@ -33,6 +35,8 @@ static const MString TYPE_NAME = "HideRandomElementsNode";
 //  STATIC VARIABLES
 //----------------------------------------------------------------------------
 MObject HideElementsNode::geometryIn;
+MObject HideElementsNode::growIters;
+MObject HideElementsNode::hidePercent;
 MObject HideElementsNode::geometryOut;
 
 //----------------------------------------------------------------------------
@@ -50,35 +54,29 @@ HideElementsNode::~HideElementsNode()
 }
 
 
-//MStatus HideElementsNode::doIt(const MArgList& args)
-//{
-//	int iterations = 100;
-//	// Gather the shells to be hidden
-//	MIntArray element_ids = gatherShells(iterations, .5);
-//
-//	// Polygon selection
-//	MFnSingleIndexedComponent mfn_component;
-//	MObject component = mfn_component.create(MFn::kMeshPolygonComponent);
-//	mfn_component.addElements(element_ids);
-//
-//	MSelectionList curr_sel;
-//	MSelectionList to_sel;
-//	MDagPath curr_sel_dag;
-//	MGlobal::getActiveSelectionList(curr_sel);
-//	curr_sel.getDagPath(0, curr_sel_dag);
-//	to_sel.add(curr_sel_dag, component);
-//
-//	MGlobal::setActiveSelectionList(to_sel);
-//
-//	return(status);
-//}
+
 
 MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 {
-	if (plug == geometryIn)
+	MStatus status;
+	if (plug == geometryOut)
 	{
+		int grow_iterations = data.inputValue(growIters).asInt();
+		double hide_percentage = data.inputValue(hidePercent).asDouble();
 		MObject geo = data.inputValue(geometryIn).asMesh();
+		MItMeshPolygon polygon_itr(geo, &status);
+		if (!status)
+		{
+			MGlobal::displayError("Failed to create polygon iterator: " + status.errorString());
+			return(status);
+		}
 
+		gatherShells(polygon_itr, grow_iterations, hide_percentage);
+
+		MDataHandle geometryOutputDataHandle = data.outputValue(geometryOut);
+		geometryOutputDataHandle.setMObject(geo);
+
+		data.setClean(plug);
 	}
 
 	return (MStatus::kSuccess);
@@ -88,7 +86,7 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 // PRIVATE METHODS
 //----------------------------------------------------------------------------
 
-MIntArray HideElementsNode::gatherShells(const int& grow_iterations, const double& hide_percentage)
+MIntArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
 {
 #ifdef _DEBUG
 	TimeProfiler extendToShell_profiler = TimeProfiler();
@@ -97,14 +95,6 @@ MIntArray HideElementsNode::gatherShells(const int& grow_iterations, const doubl
 	removingShells_profiler.print_info = MString("removeShells: ");
 #endif
 	MString out_str;
-
-	// Construct a MItMeshPolygon
-	MSelectionList polygon_selection;
-	MGlobal::getActiveSelectionList(polygon_selection);
-
-	MDagPath selection_dag;
-	polygon_selection.getDagPath(0, selection_dag);
-	MItMeshPolygon polygon_itr(selection_dag);
 
 	// Store all the element IDs in a MIntArray
 	std::vector<int> faceIDs;
@@ -271,23 +261,42 @@ MStatus HideElementsNode::Initialize()
 {
 	MStatus status;
 	MFnTypedAttribute typedAttr;
+	MFnNumericAttribute numericAttr;
 
 	MFnMeshData fnMeshData;
 	MObject meshDefaultObject = fnMeshData.create(&status);
+
+	// IN ATTRIBUTES
 	geometryIn = typedAttr.create("geometryIn", "in", MFnData::kMesh, meshDefaultObject);
 	status = typedAttr.setKeyable(true);
 	status = typedAttr.setWritable(true);
 	status = typedAttr.setReadable(false);
 
+	growIters = numericAttr.create("growIters", "gi", MFnNumericData::kInt);
+	status = numericAttr.setKeyable(true);
+	status = numericAttr.setWritable(true);
+	status = numericAttr.setReadable(false);
+
+	hidePercent = numericAttr.create("hidePercent", "hp", MFnNumericData::kDouble);
+	status = numericAttr.setKeyable(true);
+	status = numericAttr.setWritable(true);
+	status = numericAttr.setReadable(false);
+
+	// OUT ATTRIBUTES
 	geometryOut = typedAttr.create("geometryOut", "out", MFnData::kMesh, meshDefaultObject);
 	status = typedAttr.setKeyable(true);
 	status = typedAttr.setReadable(true);
 	status = typedAttr.setWritable(false);
 
 	addAttribute(geometryIn);
+	addAttribute(growIters);
+	addAttribute(hidePercent);
+
 	addAttribute(geometryOut);
 
 	attributeAffects(geometryIn, geometryOut);
+	attributeAffects(growIters, geometryOut);
+	attributeAffects(hidePercent, geometryOut);
 
 	return (status);
 }

@@ -8,7 +8,7 @@ if len(sys.argv) > 1:
     
 try:
     tn = telnetlib.Telnet("localhost", port)
-    tn.write('file -o -f "C:/Users/emild/Desktop/test_scene_select_elements2.mb";'.encode())
+    tn.write('file -o -f "C:/Users/emild/Desktop/test_scene_select_elements.mb";'.encode())
     tn.write('catchQuiet(`loadPlugin "Maya_hideRandomElements"`);'.encode())
     tn.close()
     

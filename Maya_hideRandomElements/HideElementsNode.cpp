@@ -13,6 +13,7 @@
 #include <maya/MFnMesh.h>
 #include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MIntArray.h>
+#include <maya/MUIntArray.h>
 #include <maya/MSyntax.h>
 #include <maya/MArgDatabase.h>
 
@@ -21,6 +22,7 @@
 
 #include <time.h>
 #include <vector>
+#include <set>
 #include <algorithm>
 #include <map>
 #include <unordered_map>
@@ -54,89 +56,79 @@ HideElementsNode::~HideElementsNode()
 }
 
 
-
-
 MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 {
+	TimeProfiler main_profiler = TimeProfiler();
+	main_profiler.print_info = MString("compute(): ");
+	main_profiler.addTimer();
 	MStatus status;
 	if (plug == geometryOut)
 	{
 		int grow_iterations = data.inputValue(growIters).asInt();
-		double hide_percentage = data.inputValue(hidePercent).asDouble();
+		double hide_percentage = data.inputValue(hidePercent).asDouble() * .01;
 		MObject geo = data.inputValue(geometryIn).asMesh();
+		MDataHandle geometryOutputDataHandle = data.outputValue(geometryOut);
+
 		MItMeshPolygon polygon_itr(geo, &status);
 		if (!status)
 		{
 			MGlobal::displayError("Failed to create polygon iterator: " + status.errorString());
 			return(status);
 		}
+		MUintArray faceIDs = gatherShells(polygon_itr, grow_iterations, hide_percentage);
 
-		gatherShells(polygon_itr, grow_iterations, hide_percentage);
-
-		MDataHandle geometryOutputDataHandle = data.outputValue(geometryOut);
+		if (geo.hasFn(MFn::kMesh))
+		{
+			MFnMesh meshFn(geo, &status);
+			meshFn.setInvisibleFaces(faceIDs);
+		}
 		geometryOutputDataHandle.setMObject(geo);
+
 
 		data.setClean(plug);
 	}
-
-	return (MStatus::kSuccess);
+	main_profiler.stopTimer();
+	return (status);
 }
 
 //----------------------------------------------------------------------------
 // PRIVATE METHODS
 //----------------------------------------------------------------------------
 
-MIntArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
+MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
 {
-#ifdef _DEBUG
-	TimeProfiler extendToShell_profiler = TimeProfiler();
-	extendToShell_profiler.print_info = MString("extendtoShell: ");
-	TimeProfiler removingShells_profiler = TimeProfiler();
-	removingShells_profiler.print_info = MString("removeShells: ");
-#endif
 	MString out_str;
 
 	// Store all the element IDs in a MIntArray
-	std::vector<int> faceIDs;
+	std::set<int> faceIDs;
 	for (polygon_itr.reset(); !polygon_itr.isDone(); polygon_itr.next())
 	{
-		faceIDs.push_back(polygon_itr.index());
+		faceIDs.insert(polygon_itr.index());
 	}
 	// pass MItMeshPolygon into the extendToShell() function and get the shell IDs
-	MIntArray selected_shells;
+	MUintArray selected_shells;
+	MUintArray shell_ids;
 
-	int loop_count = 0;
-	MIntArray shell_ids;
-
+	int count = 0;
 	while (faceIDs.size() > 0)
 	{
-		loop_count++;
-		// Safeguard against infinite loops
-		if (loop_count > 1000)
+		count++;
+		if (count > 1000000)
 		{
 			break;
 		}
-		double rand_num = MRandom::Rand_d(loop_count, time(NULL) + loop_count);
-#ifdef _DEBUG
-		extendToShell_profiler.addTimer();
-#endif 
-		shell_ids = extendToShell(polygon_itr, grow_iterations, faceIDs[0]);
-#ifdef _DEBUG
-		extendToShell_profiler.stopTimer();
-#endif 
-		// take the returned indices and store them with a random value assigned to that set
-#ifdef _DEBUG
-		removingShells_profiler.addTimer();
-#endif 
-		for (unsigned int j = 0; j < shell_ids.length(); j++)
+		double rand_num = MRandom::Rand_d(count, time(NULL) + count);
+
+		shell_ids = extendToShell(polygon_itr, grow_iterations, *(faceIDs.begin()));
+		// Remove shell_ids from faceIDs
+		for (const auto& shell_id : shell_ids)
 		{
 			if (faceIDs.size() > 0)
 			{
-				faceIDs.erase(std::remove(faceIDs.begin(), faceIDs.end(), shell_ids[j]), faceIDs.end());
-
-				if (rand_num >= hide_percentage)
+				faceIDs.erase(shell_id);
+				if (rand_num > hide_percentage)
 				{
-					selected_shells.append(shell_ids[j]);
+					selected_shells.append(shell_id);
 				}
 			}
 			else
@@ -144,22 +136,18 @@ MIntArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int&
 				break;
 			}
 		}
-#ifdef _DEBUG
-		removingShells_profiler.stopTimer();
-#endif
 	}
 	out_str = "Final shell amount: ";
-	out_str += loop_count;
+	out_str += count;
 	MGlobal::displayInfo(out_str);
 	return selected_shells;
 }
 
 
-MIntArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int& grow_iterations, const int& start_index)
+MUintArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int& grow_iterations, const int& start_index)
 {
-	MIntArray face_ids;
+	MUintArray face_ids;
 	MStatus status;
-	MString out_str;
 
 	// Full Element ID tree, initialize with start index
 	std::vector<std::vector<int>> element_ids;
@@ -184,9 +172,9 @@ MIntArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int
 		for (int j = 0; j < id_queue.size(); j++)
 		{
 			
-			std::vector<int> connected_faces = growSelection(polygon_itr, element_ids, id_queue[j], tree_level);
+			MIntArray connected_faces = growSelection(polygon_itr, id_queue[j]);
 
-			for (int k = 0; k < connected_faces.size(); k++)
+			for (int k = 0; k < connected_faces.length(); k++)
 			{
 				// Check if ID is unique before pushing into array
 				if (!HideElementsNode::elementExists(element_ids, connected_faces[k]))
@@ -198,7 +186,7 @@ MIntArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int
 		id_queue = element_ids[tree_level];
 	}
 
-	// Fill the MIntArray
+	// Fill the MUintArray
 	for (int i = 0; i < element_ids.size(); i++)
 	{
 		for (int j = 0; j < element_ids[i].size(); j++)
@@ -211,22 +199,15 @@ MIntArray HideElementsNode::extendToShell(MItMeshPolygon& polygon_itr, const int
 }
 
 
-std::vector<int> HideElementsNode::growSelection(MItMeshPolygon& polygon_itr, std::vector<std::vector<int>>& element_ids, const int& index, const int& depth)
+MIntArray HideElementsNode::growSelection(MItMeshPolygon& polygon_itr, const int& index)
 {
 	MIntArray ids;
 	int dummy_index;
-	std::vector<int> connected_ids;
 
 	polygon_itr.setIndex(index, dummy_index);
 	polygon_itr.getConnectedFaces(ids);
 
-	for (unsigned int i = 0; i < ids.length(); i++)
-	{
-		connected_ids.push_back(ids[i]);
-
-	}
-
-	return connected_ids;
+	return ids;
 }
 
 
@@ -272,12 +253,12 @@ MStatus HideElementsNode::Initialize()
 	status = typedAttr.setWritable(true);
 	status = typedAttr.setReadable(false);
 
-	growIters = numericAttr.create("growIters", "gi", MFnNumericData::kInt);
+	growIters = numericAttr.create("growIters", "gi", MFnNumericData::kInt, 100);
 	status = numericAttr.setKeyable(true);
 	status = numericAttr.setWritable(true);
 	status = numericAttr.setReadable(false);
 
-	hidePercent = numericAttr.create("hidePercent", "hp", MFnNumericData::kDouble);
+	hidePercent = numericAttr.create("hidePercent", "hp", MFnNumericData::kDouble, 50);
 	status = numericAttr.setKeyable(true);
 	status = numericAttr.setWritable(true);
 	status = numericAttr.setReadable(false);

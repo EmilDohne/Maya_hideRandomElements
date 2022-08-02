@@ -22,6 +22,7 @@
 
 #include <time.h>
 #include <vector>
+#include <set>
 #include <algorithm>
 #include <map>
 #include <unordered_map>
@@ -97,23 +98,28 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 
 MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
 {
+#ifdef _DEBUG
 	TimeProfiler storeFaceIds_profiler = TimeProfiler();
 	storeFaceIds_profiler.print_info = MString("storeFaceIds: ");
 	TimeProfiler extendToShell_profiler = TimeProfiler();
 	extendToShell_profiler.print_info = MString("extendtoShell(): ");
 	TimeProfiler removingShells_profiler = TimeProfiler();
 	removingShells_profiler.print_info = MString("removeShells: ");
+#endif // DEBUG
 	MString out_str;
 
 	// Store all the element IDs in a MIntArray
+#ifdef _DEBUG
 	storeFaceIds_profiler.addTimer();
-	std::vector<int> faceIDs;
+#endif // DEBUG
+	std::set<int> faceIDs;
 	for (polygon_itr.reset(); !polygon_itr.isDone(); polygon_itr.next())
 	{
-		faceIDs.push_back(polygon_itr.index());
+		faceIDs.insert(polygon_itr.index());
 	}
+#ifdef _DEBUG
 	storeFaceIds_profiler.stopTimer();
-
+#endif // DEBUG
 	// pass MItMeshPolygon into the extendToShell() function and get the shell IDs
 	MUintArray selected_shells;
 	MUintArray shell_ids;
@@ -122,19 +128,28 @@ MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int
 	while (faceIDs.size() > 0)
 	{
 		count++;
+		if (count > 1000000)
+		{
+			break;
+		}
 		double rand_num = MRandom::Rand_d(count, time(NULL) + count);
-
+#ifdef _DEBUG
 		extendToShell_profiler.addTimer();
-		shell_ids = extendToShell(polygon_itr, grow_iterations, faceIDs[0]);
+#endif // DEBUG
+		shell_ids = extendToShell(polygon_itr, grow_iterations, *(faceIDs.begin()));
+#ifdef _DEBUG
 		extendToShell_profiler.stopTimer();
+#endif // DEBUG
 
 		// Remove shell_ids from faceIDs
+#ifdef _DEBUG
 		removingShells_profiler.addTimer();
+#endif // DEBUG
 		for (const auto& shell_id : shell_ids)
 		{
 			if (faceIDs.size() > 0)
 			{
-				faceIDs.erase(std::remove(faceIDs.begin(), faceIDs.end(), shell_id), faceIDs.end());
+				faceIDs.erase(shell_id);
 				if (rand_num > hide_percentage)
 				{
 					selected_shells.append(shell_id);
@@ -145,11 +160,14 @@ MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int
 				break;
 			}
 		}
+#ifdef _DEBUG
 		removingShells_profiler.stopTimer();
+#endif // DEBUG
 	}
-	out_str = "Final shell amount: ";
-	out_str += count;
-	MGlobal::displayInfo(out_str);
+
+out_str = "Final shell amount: ";
+out_str += count;
+MGlobal::displayInfo(out_str);
 	return selected_shells;
 }
 

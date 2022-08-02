@@ -58,10 +58,10 @@ HideElementsNode::~HideElementsNode()
 MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 {
 	MStatus status;
-	if (plug == geometryIn)
+	if (plug == geometryOut)
 	{
 		int grow_iterations = data.inputValue(growIters).asInt();
-		double hide_percentage = data.inputValue(hidePercent).asDouble();
+		double hide_percentage = data.inputValue(hidePercent).asDouble() * .01;
 		MObject geo = data.inputValue(geometryIn).asMesh();
 		MItMeshPolygon polygon_itr(geo, &status);
 		if (!status)
@@ -84,6 +84,7 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 
 		data.setClean(plug);
 	}
+	
 	return (status);
 }
 
@@ -270,12 +271,12 @@ MStatus HideElementsNode::Initialize()
 	status = typedAttr.setWritable(true);
 	status = typedAttr.setReadable(false);
 
-	growIters = numericAttr.create("growIters", "gi", MFnNumericData::kInt);
+	growIters = numericAttr.create("growIters", "gi", MFnNumericData::kInt, 100);
 	status = numericAttr.setKeyable(true);
 	status = numericAttr.setWritable(true);
 	status = numericAttr.setReadable(false);
 
-	hidePercent = numericAttr.create("hidePercent", "hp", MFnNumericData::kDouble);
+	hidePercent = numericAttr.create("hidePercent", "hp", MFnNumericData::kDouble, 50);
 	status = numericAttr.setKeyable(true);
 	status = numericAttr.setWritable(true);
 	status = numericAttr.setReadable(false);

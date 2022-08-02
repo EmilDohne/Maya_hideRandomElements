@@ -77,6 +77,7 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 		geometryOutputDataHandle.setMObject(geo);
 
 		data.setClean(plug);
+		//test
 	}
 
 	return (MStatus::kSuccess);

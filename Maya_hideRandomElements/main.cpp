@@ -8,9 +8,9 @@ MStatus initializePlugin(MObject pluginObj)
 {
 	const char* vendor = "Emil Dohne";
 #ifndef _DEBUG 
-	const char* version = "0.1.0";
+	const char* version = "0.1.1";
 #else
-	const char* version = "0.1.0 DEBUG";
+	const char* version = "0.1.1 DEBUG";
 #endif
 	const char* requiredApiVersion = "Any";
 

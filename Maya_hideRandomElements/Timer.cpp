@@ -58,6 +58,6 @@ void TimeProfiler::Stop()
 
 	MGlobal::displayInfo(print_info + MString("total processing time in ms = ") + time*0.001);
 	MGlobal::displayInfo(print_info + MString("average processing time in ms = ") + avg_time * 0.001);
-	MGlobal::displayInfo(print_info + MString(" was traversed this many times: ") + count);
+	MGlobal::displayInfo(print_info + MString("was traversed this many times: ") + count);
 
 }

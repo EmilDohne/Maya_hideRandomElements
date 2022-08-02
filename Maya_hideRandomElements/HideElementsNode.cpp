@@ -75,16 +75,15 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 			MGlobal::displayError("Failed to create polygon iterator: " + status.errorString());
 			return(status);
 		}
-
 		MUintArray faceIDs = gatherShells(polygon_itr, grow_iterations, hide_percentage);
 
 		if (geo.hasFn(MFn::kMesh))
 		{
 			MFnMesh meshFn(geo, &status);
-
 			meshFn.setInvisibleFaces(faceIDs);
 		}
 		geometryOutputDataHandle.setMObject(geo);
+
 
 		data.setClean(plug);
 	}
@@ -98,28 +97,14 @@ MStatus HideElementsNode::compute(const MPlug& plug, MDataBlock& data)
 
 MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int& grow_iterations, const double& hide_percentage)
 {
-#ifdef _DEBUG
-	TimeProfiler storeFaceIds_profiler = TimeProfiler();
-	storeFaceIds_profiler.print_info = MString("storeFaceIds: ");
-	TimeProfiler extendToShell_profiler = TimeProfiler();
-	extendToShell_profiler.print_info = MString("extendtoShell(): ");
-	TimeProfiler removingShells_profiler = TimeProfiler();
-	removingShells_profiler.print_info = MString("removeShells: ");
-#endif // DEBUG
 	MString out_str;
 
 	// Store all the element IDs in a MIntArray
-#ifdef _DEBUG
-	storeFaceIds_profiler.addTimer();
-#endif // DEBUG
 	std::set<int> faceIDs;
 	for (polygon_itr.reset(); !polygon_itr.isDone(); polygon_itr.next())
 	{
 		faceIDs.insert(polygon_itr.index());
 	}
-#ifdef _DEBUG
-	storeFaceIds_profiler.stopTimer();
-#endif // DEBUG
 	// pass MItMeshPolygon into the extendToShell() function and get the shell IDs
 	MUintArray selected_shells;
 	MUintArray shell_ids;
@@ -133,18 +118,9 @@ MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int
 			break;
 		}
 		double rand_num = MRandom::Rand_d(count, time(NULL) + count);
-#ifdef _DEBUG
-		extendToShell_profiler.addTimer();
-#endif // DEBUG
-		shell_ids = extendToShell(polygon_itr, grow_iterations, *(faceIDs.begin()));
-#ifdef _DEBUG
-		extendToShell_profiler.stopTimer();
-#endif // DEBUG
 
+		shell_ids = extendToShell(polygon_itr, grow_iterations, *(faceIDs.begin()));
 		// Remove shell_ids from faceIDs
-#ifdef _DEBUG
-		removingShells_profiler.addTimer();
-#endif // DEBUG
 		for (const auto& shell_id : shell_ids)
 		{
 			if (faceIDs.size() > 0)
@@ -160,14 +136,10 @@ MUintArray HideElementsNode::gatherShells(MItMeshPolygon& polygon_itr, const int
 				break;
 			}
 		}
-#ifdef _DEBUG
-		removingShells_profiler.stopTimer();
-#endif // DEBUG
 	}
-
-out_str = "Final shell amount: ";
-out_str += count;
-MGlobal::displayInfo(out_str);
+	out_str = "Final shell amount: ";
+	out_str += count;
+	MGlobal::displayInfo(out_str);
 	return selected_shells;
 }
 
